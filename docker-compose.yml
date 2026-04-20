@@ -1,0 +1,63 @@
+services:
+  # ── LocalStack (AWS emulator) ───────────────────────────────────────────────
+  localstack:
+    image: localstack/localstack:3.4
+    container_name: api-consumer-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=secretsmanager
+      - DEFAULT_REGION=us-east-1
+      - DEBUG=0
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── Seed job: populates LocalStack secrets before the app starts ────────────
+  seed:
+    image: amazon/aws-cli:2.15.0
+    container_name: api-consumer-seed
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - ./scripts:/scripts
+    entrypoint: ["/bin/sh", "/scripts/seed-localstack.sh"]
+
+  # ── Next.js application ─────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: api-consumer-app
+    ports:
+      - "3000:3000"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      # App
+      - APP_ENV=development
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=local-dev-secret-change-me
+
+      # AWS / LocalStack
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      - AWS_SECRET_NAME_AZURE=api-consumer/azure-ad
+      - AWS_SECRET_NAME_API_CREDENTIALS=api-consumer/api-credentials
+    restart: unless-stopped
+
+volumes:
+  localstack_data:

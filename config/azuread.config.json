@@ -1,0 +1,8 @@
+{
+  "authority": "https://login.microsoftonline.com/{TENANT_ID}",
+  "redirectUri": "http://localhost:3000/api/auth/callback/azure-ad",
+  "scopes": ["openid", "profile", "email", "offline_access"],
+  "responseType": "code",
+  "responseMode": "query",
+  "tokenEndpointAuthMethod": "client_secret_post"
+}
