@@ -1,3 +1,23 @@
+// ─── Change Session ───────────────────────────────────────────────────────────
+
+export interface ChangeSession {
+  changeNumber: string;
+  startTime: Date;
+  endTime: Date;
+  openedAt: Date;
+}
+
+export interface CallLog {
+  seq: number;
+  timestamp: Date;
+  method: string;
+  url: string;
+  statusCode: number;
+  statusText: string;
+  responseTimeMs: number;
+  error?: string;
+}
+
 // ─── HTTP Request / Response ──────────────────────────────────────────────────
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
