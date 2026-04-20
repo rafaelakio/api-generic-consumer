@@ -9,11 +9,13 @@ import {
   useState,
 } from 'react';
 import type { ApiResponse, CallLog, ChangeSession } from '@/types';
+import { buildReport } from '@/lib/report';
 
 interface OpenSessionInput {
   changeNumber: string;
   startTime: Date;
   endTime: Date;
+  openedBy: string;
 }
 
 interface ChangeSessionContextValue {
@@ -27,6 +29,24 @@ interface ChangeSessionContextValue {
 }
 
 const ChangeSessionContext = createContext<ChangeSessionContextValue | null>(null);
+
+async function serverLog(payload: {
+  changeNumber: string;
+  level: 'SESSION_OPEN' | 'CALL' | 'SESSION_CLOSE' | 'SESSION_SUMMARY' | 'FULL_REPORT';
+  message: string;
+  timestamp: string;
+  table?: Record<string, unknown>[];
+}) {
+  try {
+    await fetch('/api/audit-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // silently ignore — browser console still has the log
+  }
+}
 
 export function ChangeSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<ChangeSession | null>(null);
@@ -49,22 +69,49 @@ export function ChangeSessionProvider({ children }: { children: React.ReactNode 
     const now = new Date();
 
     if (s) {
-      console.log(
-        `[${s.changeNumber}] [${now.toISOString()}] ENCERRAMENTO DE SESSÃO | ` +
-        `Total de chamadas: ${logs.length}`,
-      );
-      if (logs.length > 0) {
-        console.table(
-          logs.map((l) => ({
-            '#': l.seq,
-            'Timestamp': l.timestamp.toLocaleString('pt-BR'),
-            'Método': l.method,
-            'URL': l.url,
-            'Status': l.error ? `ERRO: ${l.error}` : `${l.statusCode} ${l.statusText}`,
-            'Tempo (ms)': l.responseTimeMs,
-          })),
-        );
-      }
+      const durationMs = now.getTime() - s.openedAt.getTime();
+      const closeMsg =
+        `ENCERRAMENTO DE SESSÃO | Total de chamadas: ${logs.length} | ` +
+        `Sessão permaneceu aberta por: ${formatDuration(durationMs)}`;
+
+      console.log(`[${s.changeNumber}] [${now.toISOString()}] ${closeMsg}`);
+
+      const table = logs.map((l) => ({
+        '#': l.seq,
+        'Timestamp': l.timestamp.toLocaleString('pt-BR'),
+        'Método': l.method,
+        'URL': l.url,
+        'Status': l.error ? `ERRO: ${l.error}` : `${l.statusCode} ${l.statusText}`,
+        'Tempo (ms)': l.responseTimeMs,
+      }));
+
+      if (logs.length > 0) console.table(table);
+
+      serverLog({
+        changeNumber: s.changeNumber,
+        level: 'SESSION_CLOSE',
+        message: closeMsg,
+        timestamp: now.toISOString(),
+      });
+
+      serverLog({
+        changeNumber: s.changeNumber,
+        level: 'SESSION_SUMMARY',
+        message: `URLs consumidas (${logs.length})`,
+        timestamp: now.toISOString(),
+        table: logs.length > 0 ? table : undefined,
+      });
+
+      const updatedSession = { ...s, closedAt: now };
+      setSession(updatedSession);
+
+      const report = buildReport(updatedSession, logs, now);
+      serverLog({
+        changeNumber: s.changeNumber,
+        level: 'FULL_REPORT',
+        message: report,
+        timestamp: now.toISOString(),
+      });
     }
 
     setSummaryVisible(true);
@@ -76,7 +123,7 @@ export function ChangeSessionProvider({ children }: { children: React.ReactNode 
     const now = new Date();
     seqRef.current = 0;
 
-    const newSession: ChangeSession = { ...data, openedAt: now };
+    const newSession: ChangeSession = { ...data, openedAt: now, openedBy: data.openedBy };
     setSession(newSession);
     setCallLogs([]);
     setSummaryVisible(false);
@@ -84,12 +131,20 @@ export function ChangeSessionProvider({ children }: { children: React.ReactNode 
     const msUntilEnd = data.endTime.getTime() - now.getTime();
     const totalMs = data.endTime.getTime() - data.startTime.getTime();
 
-    console.log(
-      `[${data.changeNumber}] [${now.toISOString()}] INÍCIO DE SESSÃO | ` +
+    const openMsg =
+      `INÍCIO DE SESSÃO | ` +
       `Janela: ${data.startTime.toLocaleString('pt-BR')} → ${data.endTime.toLocaleString('pt-BR')} | ` +
       `Duração total da janela: ${formatDuration(totalMs)} | ` +
-      `Encerramento automático em: ${formatDuration(msUntilEnd)}`,
-    );
+      `Sessão aberta por: ${formatDuration(msUntilEnd)}`;
+
+    console.log(`[${data.changeNumber}] [${now.toISOString()}] ${openMsg}`);
+
+    serverLog({
+      changeNumber: data.changeNumber,
+      level: 'SESSION_OPEN',
+      message: openMsg,
+      timestamp: now.toISOString(),
+    });
 
     if (msUntilEnd > 0) {
       expireTimerRef.current = setTimeout(closeSession, msUntilEnd);
@@ -123,9 +178,16 @@ export function ChangeSessionProvider({ children }: { children: React.ReactNode 
       ? `ERRO: ${response.error}`
       : `${response.statusCode} ${response.statusText}`;
 
-    console.log(
-      `[${s.changeNumber}] [${timestamp.toISOString()}] #${seq} ${method} ${url} → ${status} (${response.responseTimeMs}ms)`,
-    );
+    const callMsg = `#${seq} ${method} ${url} → ${status} (${response.responseTimeMs}ms)`;
+
+    console.log(`[${s.changeNumber}] [${timestamp.toISOString()}] ${callMsg}`);
+
+    serverLog({
+      changeNumber: s.changeNumber,
+      level: 'CALL',
+      message: callMsg,
+      timestamp: timestamp.toISOString(),
+    });
   }
 
   function dismissSummary() {

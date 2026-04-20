@@ -5,6 +5,8 @@ export interface ChangeSession {
   startTime: Date;
   endTime: Date;
   openedAt: Date;
+  closedAt?: Date;
+  openedBy: string;
 }
 
 export interface CallLog {
