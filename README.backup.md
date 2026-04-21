@@ -1,37 +1,46 @@
-# Api Generic Consumer
-
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-green.svg)
-![React](https://img.shields.io/badge/React-blue.svg) ![Next.js](https://img.shields.io/badge/Next.js-blue.svg) ![TypeScript](https://img.shields.io/badge/TypeScript-blue.svg) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-blue.svg)
-
-## 📝 Descrição
+# API Generic Consumer
 
 A fullstack web application built with **Next.js 14 (App Router)** that acts as a Mini Postman/Insomnia — letting authenticated users test any HTTP API with full control over method, headers, body, and SSL options.
 
+---
 
-## ✨ Características Principais
+## Architecture Overview
 
-- 🚀 Performance otimizada
-- 🎨 Interface moderna e responsiva
-- 🔧 Código bem estruturado e documentado
-- 🧪 Testes automatizados
-- 📦 Build otimizado para produção
+```
+Browser → CloudFront → S3 (static)
+                     → Next.js SSR/API Routes (ECS/Lambda)
+                                ↓
+                        AWS Secrets Manager
+                                ↓
+                         Target API (via OAuth2 client-credentials)
+```
 
-## 🚀 Quick Start
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14, React 18, Tailwind CSS |
+| Backend (API Routes) | Next.js Route Handlers, Axios |
+| Authentication | NextAuth.js + Azure AD (OAuth2/OIDC) |
+| Secrets | AWS Secrets Manager |
+| Infrastructure | Terraform (S3 + CloudFront + IAM) |
+| Local Dev | Docker Compose + LocalStack |
 
-### Pré-requisitos
+---
 
-- Node.js 18+ 
-- npm ou yarn
+## Prerequisites
+
+- Node.js 20+
 - Docker & Docker Compose
 - AWS CLI (for Terraform and LocalStack)
 - Terraform 1.6+ (for infrastructure)
 
-### 1. Instalação
+---
+
+## Running Locally
+
+### 1. Clone and install dependencies
 
 ```bash
-# Clonar o repositório
-git clone https://github.com/username/api-generic-consumer.git
+git clone <repo>
 cd api-generic-consumer
 npm install
 ```
@@ -48,7 +57,7 @@ Edit `.env.local` — the defaults work for LocalStack. You only need to set `NE
 NEXTAUTH_SECRET=super-secret-random-string-at-least-32-chars
 ```
 
-### Desenvolvimento
+### 3. Start LocalStack + seed secrets
 
 ```bash
 docker compose up localstack seed --wait
@@ -71,11 +80,7 @@ Open http://localhost:3000.
 ### Running everything with Docker Compose
 
 ```bash
-# Build para produção
-npm run build
-
 docker compose up --build
-
 ```
 
 ---
@@ -170,37 +175,7 @@ No `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` needed — the task IAM role pr
 
 ---
 
-## 🏗️ Arquitetura
-
-```
-src/
-├── components/     # Componentes reutilizáveis
-├── pages/         # Páginas da aplicação
-├── services/      # Lógica de negócio
-├── utils/         # Utilitários
-├── types/         # Definições de TypeScript
-└── styles/        # Estilos globais
-```
-
-```
-Browser → CloudFront → S3 (static)
-                     → Next.js SSR/API Routes (ECS/Lambda)
-                                ↓
-                        AWS Secrets Manager
-                                ↓
-                         Target API (via OAuth2 client-credentials)
-```
-
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js 14, React 18, Tailwind CSS |
-| Backend (API Routes) | Next.js Route Handlers, Axios |
-| Authentication | NextAuth.js + Azure AD (OAuth2/OIDC) |
-| Secrets | AWS Secrets Manager |
-| Infrastructure | Terraform (S3 + CloudFront + IAM) |
-| Local Dev | Docker Compose + LocalStack |
-
-### Project Structure
+## Project Structure
 
 ```
 api-generic-consumer/
@@ -231,57 +206,6 @@ api-generic-consumer/
 └── .env.example
 ```
 
-## 📚 Documentação
-
-- [Documentação Completa](./docs/README.md)
-- [API Reference](./docs/api.md)
-- [Guia de Contribuição](./CONTRIBUTING.md)
-- [Código de Conduta](./CODE_OF_CONDUCT.md)
-
-## 🤝 Como Contribuir
-
-Contribuições são sempre bem-vindas! Por favor, leia nosso [Guia de Contribuição](./CONTRIBUTING.md) para detalhes sobre nosso código de conduta e o processo para enviar pull requests.
-
-## 🐛 Reportando Bugs
-
-Se você encontrou um bug, por favor:
-
-1. Verifique se já existe uma [issue aberta](https://github.com/username/api-generic-consumer/issues)
-2. Se não, [abra uma nova issue](https://github.com/username/api-generic-consumer/issues/new) descrevendo:
-   - O problema encontrado
-   - Passos para reproduzir
-   - Comportamento esperado
-   - Ambiente (SO, Node.js versão, etc.)
-
-## 💡 Sugestões de Funcionalidades
-
-Temos sugestões para melhorar o projeto? [Abra uma issue](https://github.com/username/api-generic-consumer/issues/new) com a label "enhancement".
-
-## 🗺️ Roadmap
-
-- [ ] Versão 1.1 - Melhorias de performance
-- [ ] Versão 1.2 - Novas funcionalidades
-- [ ] Versão 2.0 - Refatoração completa
-
-## 📄 Licença
-
-Este projeto está licenciado sob a Licença MIT. Veja o arquivo [LICENSE](./LICENSE) para detalhes.
-
-## 👥 Autores
-
-- **Contribuidores** - *Desenvolvimento inicial* - [GitHub](https://github.com/username)
-
-## 🙏 Agradecimentos
-
-- A toda comunidade open source que torna este projeto possível
-- Aos contribuidores que ajudam a melhorar o código diariamente
-
-## 📞 Contato
-
-- **Email**: contato@exemplo.com
-- **GitHub**: https://github.com/username/api-generic-consumer
-- **Issues**: https://github.com/username/api-generic-consumer/issues
-
 ---
 
 ## Security Notes
@@ -293,4 +217,6 @@ Este projeto está licenciado sob a Licença MIT. Veja o arquivo [LICENSE](./LIC
 
 ---
 
-⭐ Se este projeto te ajudou, por favor considere deixar uma estrela!
+## License
+
+MIT
