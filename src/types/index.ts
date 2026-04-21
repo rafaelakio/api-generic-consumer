@@ -30,6 +30,15 @@ export interface RequestHeader {
   enabled: boolean;
 }
 
+export interface RequestFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  content: string; // Base64 encoded
+  fieldName?: string; // Nome do campo no formulário
+}
+
 export interface ApiRequest {
   url: string;
   method: HttpMethod;
@@ -40,6 +49,10 @@ export interface ApiRequest {
   certificate?: string;
   /** Name of the Secrets Manager secret holding the target API credentials (optional) */
   credentialsSecretName?: string;
+  // NOVOS CAMPOS
+  contentType?: 'json' | 'raw' | 'form-data' | 'x-www-form-urlencoded';
+  files?: RequestFile[];
+  formData?: Record<string, string>; // Para campos text do form
 }
 
 export interface ApiResponse {

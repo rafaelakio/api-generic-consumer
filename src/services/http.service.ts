@@ -49,13 +49,55 @@ export async function executeRequest(req: ApiRequest): Promise<ApiResponse> {
 
     // ── Body ─────────────────────────────────────────────────────────────────
     let data: unknown;
-    if (req.body && !['GET', 'DELETE'].includes(req.method)) {
-      try {
-        data = JSON.parse(req.body);
-        if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
-      } catch {
-        data = req.body;
+    let contentType = headers['Content-Type'];
+
+    if (req.method !== 'GET' && req.method !== 'DELETE') {
+      switch (req.contentType) {
+        case 'form-data':
+          const FormData = (await import('form-data')).default;
+          const form = new FormData();
+          
+          // Adicionar campos text
+          if (req.formData) {
+            Object.entries(req.formData).forEach(([key, value]) => {
+              form.append(key, value);
+            });
+          }
+          
+          // Adicionar arquivos
+          if (req.files) {
+            req.files.forEach(file => {
+              const buffer = Buffer.from(file.content, 'base64');
+              form.append(file.fieldName || 'file', buffer, {
+                filename: file.name,
+                contentType: file.type,
+              });
+            });
+          }
+          
+          data = form;
+          contentType = `multipart/form-data; boundary=${form.getBoundary()}`;
+          break;
+          
+        case 'x-www-form-urlencoded':
+          data = new URLSearchParams(req.formData || {}).toString();
+          contentType = 'application/x-www-form-urlencoded';
+          break;
+          
+        case 'json':
+        default:
+          try {
+            data = JSON.parse(req.body);
+            contentType = 'application/json';
+          } catch {
+            data = req.body;
+            contentType = 'text/plain';
+          }
       }
+    }
+
+    if (contentType && !headers['Content-Type']) {
+      headers['Content-Type'] = contentType;
     }
 
     // ── Execute ──────────────────────────────────────────────────────────────

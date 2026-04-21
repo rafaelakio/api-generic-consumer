@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import type { ApiRequest, HttpMethod, RequestHeader } from '@/types';
+import { FileUpload } from './FileUpload';
+import type { ApiRequest, HttpMethod, RequestHeader, RequestFile } from '@/types';
 
 const METHOD_OPTIONS: { label: string; value: HttpMethod }[] = [
   { label: 'GET', value: 'GET' },
@@ -55,7 +56,10 @@ export default function RequestForm({ onSubmit, loading }: RequestFormProps) {
   const [bypassSsl, setBypassSsl] = useState(false);
   const [certificate, setCertificate] = useState('');
   const [credentialsSecretName, setCredentialsSecretName] = useState('');
-  const [activeTab, setActiveTab] = useState<'headers' | 'body' | 'ssl' | 'auth'>('headers');
+  const [contentType, setContentType] = useState<'json' | 'raw' | 'form-data' | 'x-www-form-urlencoded'>('json');
+  const [files, setFiles] = useState<RequestFile[]>([]);
+  const [formData, setFormData] = useState<Record<string, string>>({});
+  const [activeTab, setActiveTab] = useState<'headers' | 'body' | 'files' | 'form' | 'ssl' | 'auth'>('headers');
 
   function applyExample(example: TestExample) {
     setUrl(example.url);
@@ -65,6 +69,9 @@ export default function RequestForm({ onSubmit, loading }: RequestFormProps) {
     setBypassSsl(false);
     setCertificate('');
     setCredentialsSecretName('');
+    setContentType('json');
+    setFiles([]);
+    setFormData({});
     setActiveTab('headers');
   }
 
@@ -82,6 +89,23 @@ export default function RequestForm({ onSubmit, loading }: RequestFormProps) {
     setHeaders((h) => h.filter((_, i) => i !== index));
   }
 
+  function addFormField() {
+    const key = `field_${Object.keys(formData).length + 1}`;
+    setFormData(prev => ({ ...prev, [key]: '' }));
+  }
+
+  function updateFormField(key: string, value: string) {
+    setFormData(prev => ({ ...prev, [key]: value }));
+  }
+
+  function removeFormField(key: string) {
+    setFormData(prev => {
+      const newFormData = { ...prev };
+      delete newFormData[key];
+      return newFormData;
+    });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSubmit({
@@ -92,15 +116,20 @@ export default function RequestForm({ onSubmit, loading }: RequestFormProps) {
       bypassSsl,
       certificate: certificate || undefined,
       credentialsSecretName: credentialsSecretName || undefined,
+      contentType,
+      files: files.length > 0 ? files : undefined,
+      formData: Object.keys(formData).length > 0 ? formData : undefined,
     });
   }
 
   const tabs = [
     { id: 'headers', label: `Headers (${headers.filter((h) => h.enabled).length})` },
-    { id: 'body', label: 'Body' },
+    { id: 'body', label: 'Body', visible: () => contentType === 'json' || contentType === 'raw' },
+    { id: 'files', label: `Files (${files.length})`, visible: () => contentType === 'form-data' },
+    { id: 'form', label: 'Form Data', visible: () => contentType === 'form-data' || contentType === 'x-www-form-urlencoded' },
     { id: 'ssl', label: 'SSL' },
     { id: 'auth', label: 'Auth' },
-  ] as const;
+  ].filter(tab => !tab.visible || tab.visible()) as Array<{ id: string; label: string }>;
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -150,6 +179,32 @@ export default function RequestForm({ onSubmit, loading }: RequestFormProps) {
         </Button>
       </div>
 
+      {/* Content Type Selector */}
+      <div className="flex items-center gap-4">
+        <span className="text-xs font-medium text-gray-400">Content-Type:</span>
+        <div className="flex items-center gap-2">
+          {[
+            { value: 'json', label: 'JSON' },
+            { value: 'raw', label: 'Raw' },
+            { value: 'form-data', label: 'Form Data' },
+            { value: 'x-www-form-urlencoded', label: 'URL Encoded' },
+          ].map((type) => (
+            <button
+              key={type.value}
+              type="button"
+              onClick={() => setContentType(type.value as any)}
+              className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                contentType === type.value
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+              }`}
+            >
+              {type.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <div className="flex border-b border-gray-200 bg-gray-50">
@@ -157,7 +212,7 @@ export default function RequestForm({ onSubmit, loading }: RequestFormProps) {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => setActiveTab(tab.id as any)}
               className={`px-4 py-2.5 text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'bg-white border-b-2 border-brand-600 text-brand-700'
@@ -218,6 +273,82 @@ export default function RequestForm({ onSubmit, loading }: RequestFormProps) {
               placeholder='{"key": "value"}'
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-mono placeholder:text-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 resize-y"
             />
+          )}
+
+          {/* ── Files ── */}
+          {activeTab === 'files' && (
+            <FileUpload
+              files={files}
+              onFilesChange={setFiles}
+              maxFiles={10}
+              maxSize={10 * 1024 * 1024} // 10MB
+            />
+          )}
+
+          {/* ── Form Data ── */}
+          {activeTab === 'form' && (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-gray-700">Form Fields</h4>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={addFormField}
+                >
+                  + Add Field
+                </Button>
+              </div>
+              
+              {Object.entries(formData).length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  No form fields added. Click "Add Field" to start.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(formData).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <Input
+                        value={key}
+                        onChange={(e) => {
+                          const newKey = e.target.value;
+                          setFormData(prev => {
+                            const newFormData = { ...prev };
+                            delete newFormData[key];
+                            newFormData[newKey] = value;
+                            return newFormData;
+                          });
+                        }}
+                        placeholder="Field name"
+                        className="flex-1"
+                      />
+                      <Input
+                        value={value}
+                        onChange={(e) => updateFormField(key, e.target.value)}
+                        placeholder="Field value"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFormField(key)}
+                      >
+                        ✕
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {contentType === 'form-data' && files.length === 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs text-blue-700">
+                    💡 Para enviar arquivos, adicione-os na aba "Files". Os arquivos serão incluídos automaticamente no formulário multipart.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
 
           {/* ── SSL ── */}

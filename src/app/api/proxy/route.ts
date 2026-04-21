@@ -18,6 +18,16 @@ const requestSchema = z.object({
   bypassSsl: z.boolean().default(false),
   certificate: z.string().optional(),
   credentialsSecretName: z.string().optional(),
+  contentType: z.enum(['json', 'raw', 'form-data', 'x-www-form-urlencoded']).default('json'),
+  files: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    size: z.number(),
+    type: z.string(),
+    content: z.string(), // Base64
+    fieldName: z.string().optional(),
+  })).optional(),
+  formData: z.record(z.string()).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -34,9 +44,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const parsed = requestSchema.safeParse(
-    (body as Record<string, unknown>)?.request,
-  );
+  // Suporte a body aninhado ou plano para evitar quebras entre versões
+  const requestData = (body as Record<string, any>)?.request ?? body;
+  const parsed = requestSchema.safeParse(requestData);
 
   if (!parsed.success) {
     return NextResponse.json(
@@ -45,8 +55,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const apiResponse = await executeRequest(parsed.data);
-
-  const responseBody: ProxyResponseBody = { data: apiResponse };
-  return NextResponse.json(responseBody);
+  try {
+    const apiResponse = await executeRequest(parsed.data);
+    const responseBody: ProxyResponseBody = { data: apiResponse };
+    return NextResponse.json(responseBody);
+  } catch (err) {
+    return NextResponse.json({ error: 'Request execution failed' }, { status: 502 });
+  }
 }
