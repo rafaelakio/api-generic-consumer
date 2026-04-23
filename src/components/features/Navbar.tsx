@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
 
@@ -8,8 +9,15 @@ interface NavbarProps {
 }
 
 export default function Navbar({ user }: NavbarProps) {
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    await signOut({ callbackUrl: '/login' });
+  }
+
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="container mx-auto px-4 max-w-7xl flex items-center justify-between h-14">
         <div className="flex items-center gap-2">
           <span className="text-lg font-bold text-brand-700">API Consumer</span>
@@ -26,9 +34,10 @@ export default function Navbar({ user }: NavbarProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => signOut({ callbackUrl: '/login' })}
+            loading={signingOut}
+            onClick={handleSignOut}
           >
-            Sign out
+            {!signingOut && 'Sair'}
           </Button>
         </div>
       </div>
