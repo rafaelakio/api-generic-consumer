@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 export default function SessionBanner() {
   const { session, callLogs, closeSession } = useChangeSession();
   const [remaining, setRemaining] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   useEffect(() => {
     if (!session) return;
@@ -34,9 +36,28 @@ export default function SessionBanner() {
     return () => clearInterval(interval);
   }, [session]);
 
+  // Reset confirmation state when session changes
+  useEffect(() => {
+    setConfirming(false);
+    setClosing(false);
+  }, [session]);
+
   if (!session) return null;
 
   const isExpiringSoon = session.endTime.getTime() - Date.now() < 5 * 60 * 1000;
+
+  function handleCloseRequest() {
+    setConfirming(true);
+  }
+
+  function handleConfirmClose() {
+    setClosing(true);
+    closeSession();
+  }
+
+  function handleCancelClose() {
+    setConfirming(false);
+  }
 
   return (
     <div
@@ -66,16 +87,40 @@ export default function SessionBanner() {
         {callLogs.length} chamada{callLogs.length !== 1 ? 's' : ''} realizada{callLogs.length !== 1 ? 's' : ''}
       </span>
 
-      <div className="ml-auto">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={closeSession}
-          className="text-red-600 hover:bg-red-100 text-xs"
-        >
-          Encerrar Sessão
-        </Button>
+      <div className="ml-auto flex items-center gap-2">
+        {confirming ? (
+          <>
+            <span className="text-xs font-medium text-red-600">Encerrar sessão?</span>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              loading={closing}
+              onClick={handleConfirmClose}
+            >
+              {!closing && 'Sim'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={closing}
+              onClick={handleCancelClose}
+            >
+              Não
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleCloseRequest}
+            className="text-red-600 hover:bg-red-100 text-xs"
+          >
+            Encerrar Sessão
+          </Button>
+        )}
       </div>
     </div>
   );
