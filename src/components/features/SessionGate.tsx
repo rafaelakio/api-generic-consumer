@@ -6,12 +6,17 @@ import { useChangeSession } from '@/context/ChangeSessionContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
+function toDateTimeLocal(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function SessionGate() {
   const { data: authSession } = useSession();
   const { openSession } = useChangeSession();
   const [changeNumber, setChangeNumber] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
+  const [startTime, setStartTime] = useState(() => toDateTimeLocal(new Date()));
+  const [endTime, setEndTime] = useState(() => toDateTimeLocal(new Date(Date.now() + 60 * 60 * 1000)));
   const [error, setError] = useState('');
 
   const userName = authSession?.user?.name ?? authSession?.user?.email ?? 'Usuário desconhecido';
