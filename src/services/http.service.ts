@@ -1,8 +1,29 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import https from 'https';
+import { execSync } from 'child_process';
 import type { ApiRequest, ApiResponse } from '@/types';
 import { getApiCredentials } from './secrets.service';
 import { getClientCredentialsToken } from './oauth.service';
+
+// Read Windows system proxy from registry once at startup.
+// env vars (HTTPS_PROXY / HTTP_PROXY) always take precedence.
+const systemProxy: { url: string | null; noProxy: string | null } = (() => {
+  if (process.platform !== 'win32') return { url: null, noProxy: null };
+  try {
+    const key = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings';
+    const out = execSync(`reg query "${key}"`, { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
+    const enabled = parseInt((out.match(/ProxyEnable\s+REG_DWORD\s+(0x\w+)/)?.[1] ?? '0'), 16) === 1;
+    const server  = out.match(/ProxyServer\s+REG_SZ\s+(\S+)/)?.[1]?.trim();
+    const override = out.match(/ProxyOverride\s+REG_SZ\s+(.+)/)?.[1]?.trim();
+    if (enabled && server) {
+      return {
+        url: server.startsWith('http') ? server : `http://${server}`,
+        noProxy: override ? override.replace(/;/g, ',').replace(/<local>/gi, 'localhost,127.0.0.1') : null,
+      };
+    }
+  } catch { /* proxy not configured or registry inaccessible */ }
+  return { url: null, noProxy: null };
+})();
 
 export async function executeRequest(req: ApiRequest): Promise<ApiResponse> {
   const start = Date.now();
@@ -100,6 +121,22 @@ export async function executeRequest(req: ApiRequest): Promise<ApiResponse> {
       headers['Content-Type'] = contentType;
     }
 
+    // ── Outgoing HTTP proxy ───────────────────────────────────────────────────
+    // Priority: HTTPS_PROXY / HTTP_PROXY env var → Windows system proxy → none
+    // Override: NO_PROXY env var → Windows ProxyOverride → none
+    let proxyConfig: AxiosRequestConfig['proxy'] | false = false;
+    const proxyUrl  = process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY ?? systemProxy.url;
+    const noProxyStr = process.env.NO_PROXY ?? systemProxy.noProxy ?? undefined;
+    if (proxyUrl && !isNoProxy(req.url, noProxyStr)) {
+      const p = new URL(proxyUrl);
+      proxyConfig = {
+        host: p.hostname,
+        port: Number(p.port) || (p.protocol === 'https:' ? 443 : 80),
+        protocol: p.protocol,
+        ...(p.username ? { auth: { username: decodeURIComponent(p.username), password: decodeURIComponent(p.password) } } : {}),
+      };
+    }
+
     // ── Execute ──────────────────────────────────────────────────────────────
     const config: AxiosRequestConfig = {
       url: req.url,
@@ -107,6 +144,7 @@ export async function executeRequest(req: ApiRequest): Promise<ApiResponse> {
       headers,
       data,
       httpsAgent,
+      proxy: proxyConfig,
       validateStatus: () => true, // surface 4xx/5xx as real responses, not throws
       timeout: 30_000,
     };
@@ -137,4 +175,22 @@ export async function executeRequest(req: ApiRequest): Promise<ApiResponse> {
       error: message,
     };
   }
+}
+
+// Returns true when the target URL matches a NO_PROXY entry.
+// Supports exact hostnames, wildcard prefixes (.corp.com) and CIDR is ignored.
+function isNoProxy(targetUrl: string, noProxy?: string): boolean {
+  if (!noProxy) return false;
+  let hostname: string;
+  try {
+    hostname = new URL(targetUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return noProxy.split(',').map(s => s.trim().toLowerCase()).some(entry => {
+    if (!entry) return false;
+    if (entry === '*') return true;
+    if (entry.startsWith('.')) return hostname === entry.slice(1) || hostname.endsWith(entry);
+    return hostname === entry;
+  });
 }

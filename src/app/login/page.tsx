@@ -10,6 +10,9 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
+  const [adminUsername, setAdminUsername] = useState('admin');
+  const [adminPassword, setAdminPassword] = useState('admin');
+  const [adminError, setAdminError] = useState('');
   const error = searchParams.get('error');
 
   useEffect(() => {
@@ -20,6 +23,24 @@ export default function LoginPage() {
     setLoadingProvider(provider);
     await signIn(provider, { callbackUrl });
     setLoadingProvider(null);
+  }
+
+  async function handleAdminSignIn(e: React.FormEvent) {
+    e.preventDefault();
+    setAdminError('');
+    setLoadingProvider('admin');
+    const result = await signIn('admin', {
+      username: adminUsername,
+      password: adminPassword,
+      callbackUrl,
+      redirect: false,
+    });
+    setLoadingProvider(null);
+    if (result?.error) {
+      setAdminError('Usuário ou senha inválidos.');
+    } else if (result?.url) {
+      router.replace(result.url);
+    }
   }
 
   return (
@@ -69,6 +90,44 @@ export default function LoginPage() {
           )}
           Entrar com Azure AD
         </button>
+
+        <div className="flex items-center gap-3 w-full">
+          <hr className="flex-1 border-gray-200" />
+          <span className="text-xs text-gray-400">ou</span>
+          <hr className="flex-1 border-gray-200" />
+        </div>
+
+        {/* Admin credentials */}
+        <form onSubmit={handleAdminSignIn} className="w-full flex flex-col gap-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Acesso Admin</p>
+          <input
+            type="text"
+            placeholder="Usuário"
+            value={adminUsername}
+            onChange={(e) => setAdminUsername(e.target.value)}
+            disabled={!!loadingProvider}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-60"
+          />
+          <input
+            type="password"
+            placeholder="Senha"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            disabled={!!loadingProvider}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-60"
+          />
+          {adminError && (
+            <p className="text-sm text-red-600">{adminError}</p>
+          )}
+          <button
+            type="submit"
+            disabled={!!loadingProvider}
+            className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-lg bg-amber-500 text-white font-semibold hover:bg-amber-600 transition-colors disabled:opacity-60"
+          >
+            {loadingProvider === 'admin' ? <Spinner /> : null}
+            Entrar como Admin
+          </button>
+        </form>
 
         <p className="text-xs text-gray-400 text-center">
           "Entrar com Windows" usa o usuário da sessão atual da máquina.
